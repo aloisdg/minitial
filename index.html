@@ -1,0 +1,232 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minitial PoC</title>
+    <link rel="stylesheet" href="https://s3.amazonaws.com/kiddsoftware-jsfiddle/mocha-1.9.0.css">
+    <style>
+      p {
+        padding: 0;
+        margin: 0;
+      }
+
+      div:nth-child(1) > p {
+        color: green;
+      }
+
+      div:nth-child(2) > p {
+        color: blue;
+      }
+    </style>
+
+    <script src="https://s3.amazonaws.com/kiddsoftware-jsfiddle/mocha-1.9.0.js"></script>
+    <script src="https://s3.amazonaws.com/kiddsoftware-jsfiddle/chai-1.5.0.js"></script>
+    <!-- https://s3.amazonaws.com/kiddsoftware-jsfiddle/chai-jquery.js -->
+
+</head>
+  <body>
+    <div><p>Extract initials</p></div>
+    <div>
+      <p>
+        Fix for
+        <a
+          href="https://github.com/nextcloud/nextcloud-vue/issues/2044"
+          title="Avatar placeholder should not take special characters"
+          >NextCloud-Vue's #2044</a
+        >
+      </p>
+    </div>
+
+    <div id="mocha"></div>
+    <script>
+      // Configure Mocha, telling both it and chai to use BDD-style tests.
+      mocha.setup("bdd");
+      chai.should();
+      var expect = chai.expect;
+      var assert = chai.assert;
+
+      // if shouldShowPlaceholder is false, this code throw...
+      const extractInitialsAsBefore = (
+        getUserIdentifier,
+        shouldShowPlaceholder
+      ) => {
+        let initials;
+        if (shouldShowPlaceholder) {
+          const user = getUserIdentifier;
+          const idx = user.indexOf(" ");
+          if (user === "") {
+            initials = "?";
+          } else {
+            initials = String.fromCodePoint(user.codePointAt(0));
+            if (idx !== -1) {
+              initials = initials.concat(
+                String.fromCodePoint(user.codePointAt(idx + 1))
+              );
+            }
+          }
+        }
+        return initials.toUpperCase();
+      };
+
+      // https://stackoverflow.com/a/25352300/1248177
+      const isAlphaNumeric = (str) => {
+        for (let i = 0; i < str.length; i++) {
+          const code = str.charCodeAt(i);
+          if (
+            !(code > 47 && code < 58) && // numeric (0-9)
+            !(code > 64 && code < 91) && // upper alpha (A-Z)
+            !(code > 96 && code < 123) // lower alpha (a-z)
+          ) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+      const firstAlphaNumerics = (word) => [...word].find(isAlphaNumeric);
+
+      const filterWords = (items) =>
+        items
+          .split(" ")
+          .map(firstAlphaNumerics)
+          .filter((w) => w !== undefined);
+
+      const extractInitials = (
+        getUserIdentifier,
+        shouldShowPlaceholder,
+        initialsCount = 2
+      ) => {
+        if (!shouldShowPlaceholder) return undefined;
+        const unknown = "?";
+        if (!getUserIdentifier) return unknown;
+        const words = filterWords(getUserIdentifier).slice(0, initialsCount);
+        return words.length ? words.join("").toUpperCase() : unknown;
+      };
+
+      // https://github.com/nextcloud/nextcloud-vue/blob/b5339a584ba62114f40635dfa1b9db4f346b421d/src/components/Avatar/Avatar.vue#L365
+      /* initials() { return extractInitial(this.getUserIdentifier, this.shouldShowPlaceholder), */
+
+      describe("Get initials from source", () => {
+        it("should be undefined when shouldShowPlaceholder is false", () => {
+          assert.throw(() => {
+            extractInitialsAsBefore(null, false);
+          }, Error);
+          expect(extractInitials(null, false)).to.be.an("undefined");
+        });
+
+        it("should be ? when getUserIdentifier is falsy", () => {
+          assert.throw(() => {
+            extractInitialsAsBefore(null, true);
+          }, Error);
+          assert.throw(() => {
+            extractInitialsAsBefore(undefined, true);
+          }, Error);
+          assert.throw(() => {
+            extractInitialsAsBefore(false, true);
+          }, Error);
+          extractInitials(null, true).should.equal("?");
+          extractInitials(undefined, true).should.equal("?");
+          extractInitials(false, true).should.equal("?");
+        });
+
+        const testcases = [
+          {
+            input: "",
+            before: "?",
+            after: "?",
+          },
+          {
+            input: "A",
+            before: "A",
+            after: "A",
+          },
+          {
+            input: "B",
+            before: "B",
+            after: "B",
+          },
+          {
+            input: "a",
+            before: "A",
+            after: "A",
+          },
+          {
+            input: "b",
+            before: "B",
+            after: "B",
+          },
+          {
+            input: "1",
+            before: "1",
+            after: "1",
+          },
+          {
+            input: "(",
+            before: "(",
+            after: "?",
+          },
+          {
+            input: "Foo",
+            before: "F",
+            after: "F",
+          },
+          {
+            input: "(Foo",
+            before: "(",
+            after: "F",
+          },
+          {
+            input: "_Foo",
+            before: "_",
+            after: "F",
+          },
+          {
+            input: "Foo Bar",
+            before: "FB",
+            after: "FB",
+          },
+          {
+            input: "foo bar",
+            before: "FB",
+            after: "FB",
+          },
+          {
+            input: "foo a bar",
+            before: "FA",
+            after: "FA",
+          },
+          {
+            input: "foo _ bar",
+            before: "F_",
+            after: "FB",
+          },
+          {
+            input: "foo _bar",
+            before: "F_",
+            after: "FB",
+          },
+        ];
+
+        testcases.forEach((testcase) => {
+          it(`should be ${testcase.after} when getUserIdentifier is ${testcase.input}`, () => {
+            extractInitialsAsBefore(testcase.input, true).should.equal(
+              testcase.before
+            );
+            extractInitials(testcase.input, true).should.equal(testcase.after);
+          });
+        });
+
+        it(`should be ABC when count is 3`, () => {
+            extractInitialsAsBefore("Alice Bob Carol", true).should.equal(
+              "AB"
+            );
+            extractInitials("Alice Bob Carol", true, 3).should.equal("ABC");
+          });
+      });
+
+      // Run all our test suites.  Only necessary in the browser.
+      mocha.run();
+    </script>
+  </body>
+</html>
